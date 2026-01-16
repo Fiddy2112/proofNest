@@ -3,6 +3,7 @@
 import { 
   ArrowRight
 } from 'lucide-react';
+import Link from 'next/link';
 
 export default function Hero() {
   return (
@@ -19,10 +20,12 @@ export default function Hero() {
       ProofNest gives a safe place for your ideas and documents.
     </p>
     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-slide-up" style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}>
-      <button className="w-full sm:w-auto px-8 py-4 bg-white text-black rounded-full font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-all group shadow-xl shadow-white/5">
+      <Link href = '/dashboard' className='cursor-pointer'>
+        <button className="w-full sm:w-auto px-8 py-4 bg-white text-black rounded-full font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-all group shadow-xl shadow-white/5 cursor-pointer">
         Protect Your First Idea <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
       </button>
-      <button className="w-full sm:w-auto px-8 py-4 bg-white/5 border border-white/10 rounded-full font-bold hover:bg-white/10 transition-all backdrop-blur-md">
+      </Link>
+      <button className="w-full sm:w-auto px-8 py-4 bg-white/5 border border-white/10 rounded-full font-bold hover:bg-white/10 transition-all backdrop-blur-md cursor-pointer">
         Explore Trust Model
       </button>
     </div>

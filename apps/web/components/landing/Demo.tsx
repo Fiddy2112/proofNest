@@ -40,14 +40,14 @@ export default function Demo() {
                 </div>
                 <textarea 
                   placeholder="Paste your concept, draft or snippet here to witness it..."
-                  className="w-full h-64 bg-transparent border-none focus:ring-0 text-xl md:text-2xl text-white placeholder:text-slate-800 resize-none leading-relaxed transition-all"
+                  className="w-full h-64 bg-transparent border-none focus:ring-0 text-xl md:text-2xl text-white placeholder:text-slate-800 resize-none leading-relaxed transition-all outline-none focus:outline-none"
                   value={demoInput}
                   onChange={(e) => setDemoInput(e.target.value)}
                   disabled={demoState !== 'idle'}
                 />
                 <div className="mt-8 flex items-center justify-between">
                   <div className="text-xs text-slate-500 font-mono">{demoInput.length} characters</div>
-                  <button onClick={handleCreateProof} disabled={!demoInput || demoState !== 'idle'} className={`px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${demoState === 'idle' ? 'bg-white text-black hover:scale-105 active:scale-95' : 'bg-white/5 text-white/20 cursor-not-allowed'}`}>
+                  <button onClick={handleCreateProof} disabled={demoInput.length <= 0||!demoInput || demoState !== 'idle'} className={`px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${demoInput.length <= 0 || demoState !== 'idle' ? 'bg-white/5 text-white/20 cursor-not-allowed' : 'bg-white text-black hover:scale-105 active:scale-95 cursor-pointer'}`}>
                     Create Proof <Fingerprint className="w-4 h-4" />
                   </button>
                 </div>
@@ -79,7 +79,7 @@ export default function Demo() {
                         <div className="p-3 bg-white/5 rounded-xl border border-white/10"><p className="text-[10px] text-slate-500 font-bold mb-1">DATA FINGERPRINT</p><p className="text-[10px] font-mono text-slate-300 break-all leading-relaxed">8f4e2c...b1a9d0</p></div>
                         <div className="p-3 bg-white/5 rounded-xl border border-white/10"><p className="text-[10px] text-slate-500 font-bold mb-1">TIMESTAMP</p><p className="text-[10px] font-mono text-slate-300">{new Date().toLocaleString()}</p></div>
                       </div>
-                      <button onClick={() => {setDemoState('idle'); setDemoInput('');}} className="text-[11px] font-bold text-slate-500 hover:text-white uppercase tracking-widest">New Proof</button>
+                      <button onClick={() => {setDemoState('idle'); setDemoInput('');}} className="text-[11px] font-bold text-slate-500 hover:text-white uppercase tracking-widest cursor-pointer">New Proof</button>
                     </div>
                   )}
                 </div>
