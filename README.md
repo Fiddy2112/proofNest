@@ -238,4 +238,8 @@ cp .env.example .env
 ### 3. Run the app
 ```copy
 npm run dev
+<<<<<<< HEAD
 ```
+=======
+```
+>>>>>>> 11a7a60a4b8e738f033ca94a0fb579ad9b685b93
