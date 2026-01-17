@@ -26,13 +26,13 @@ export async function middleware(request: NextRequest) {
           response.cookies.set({ name, value, ...options })
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options })
+          request.cookies.delete(name)
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           })
-          response.cookies.set({ name, value: '', ...options })
+          response.cookies.delete(name)
         },
       },
     }
@@ -41,13 +41,31 @@ export async function middleware(request: NextRequest) {
   // Session Audit - Use getUser() instead of getSession() for extra security
   const { data: { user } } = await supabase.auth.getUser()
 
-  // If you haven't logged in and tried to go to the -> Kick to login
+  // If you haven't logged in and tried to go to the dashboard -> Kick to login
   if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // If you are logged in and try to log in again -> Kick in the dashboard
-  if (user && request.nextUrl.pathname === '/login') {
+  // Validate folder access - user can only view their own folders
+  if (user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    const folderId = request.nextUrl.searchParams.get('folderId')
+    if (folderId) {
+      const { data: folder } = await supabase
+        .from('folders')
+        .select('id')
+        .eq('id', folderId)
+        .eq('user_id', user.id)
+        .single()
+      
+      if (!folder) {
+        // Folder doesn't exist or doesn't belong to user - redirect to dashboard
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
+    }
+  }
+
+  // If you are logged in and try to go to auth pages -> Kick to dashboard
+  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
@@ -55,5 +73,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/dashboard', '/login', '/signup']
 }

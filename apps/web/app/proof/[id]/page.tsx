@@ -3,10 +3,11 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { ShieldCheck, Fingerprint, Clock, User } from "lucide-react";
 
 type Props = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function PublicProofPage({ params }: Props) {
+  const { id } = await params;
   const supabase = supabaseServer();
 
   const { data: proof } = await supabase
@@ -22,7 +23,7 @@ export default async function PublicProofPage({ params }: Props) {
         id
       )
     `)
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
 
   if (!proof) {
@@ -74,7 +75,7 @@ export default async function PublicProofPage({ params }: Props) {
           <ProofItem
             icon={<User />}
             label="Created by"
-            value={`User ${proof.user_id.slice(0, 8)}…`}
+            value={proof.user_id ? `User ${proof.user_id.slice(0, 8)}…` : "Anonymous"}
           />
 
           <ProofItem
