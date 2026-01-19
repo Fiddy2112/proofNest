@@ -38,15 +38,12 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Session Audit - Use getUser() instead of getSession() for extra security
   const { data: { user } } = await supabase.auth.getUser()
 
-  // If you haven't logged in and tried to go to the dashboard -> Kick to login
   if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Validate folder access - user can only view their own folders
   if (user && request.nextUrl.pathname.startsWith('/dashboard')) {
     const folderId = request.nextUrl.searchParams.get('folderId')
     if (folderId) {
@@ -58,13 +55,11 @@ export async function middleware(request: NextRequest) {
         .single()
       
       if (!folder) {
-        // Folder doesn't exist or doesn't belong to user - redirect to dashboard
         return NextResponse.redirect(new URL('/dashboard', request.url))
       }
     }
   }
 
-  // If you are logged in and try to go to auth pages -> Kick to dashboard
   if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }

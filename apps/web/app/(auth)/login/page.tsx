@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, ArrowRight, Loader2, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
+import { toastError } from "@/utils/notifi";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,7 +20,7 @@ export default function LoginPage() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      alert(error.message);
+      toastError(3000 ,error.message);
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -149,9 +151,9 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 text-center">
-            <button className="text-[10px] font-mono text-slate-600 hover:text-white transition-colors uppercase tracking-widest">
+            <Link href='/signup' className="text-[10px] font-mono text-slate-600 hover:text-white transition-colors uppercase tracking-widest">
               Create a new identity
-            </button>
+            </Link>
           </div>
         </div>
       </div>

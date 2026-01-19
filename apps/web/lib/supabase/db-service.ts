@@ -122,11 +122,11 @@ export const dbService = {
       query = query.eq("status", status);
     }
 
-    const { data, error, count } = query
+    const { data, error, count } = await query
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) {
+    if(error){
       console.error("getProofs error:", error);
       return { data: [], count: 0 };
     }

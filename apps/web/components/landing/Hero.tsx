@@ -18,14 +18,16 @@ export default function Hero() {
         Secure timestamps for your ideas, notes, and documents. No accounts. No crypto. No complexity.
       </p>
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4 opacity-0 animate-slide-up" style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}>
-        <Link href='/dashboard' className='cursor-pointer'>
+        <Link href='/signup' className='cursor-pointer'>
           <button className="w-full sm:w-auto px-8 py-4 bg-white text-black rounded-full font-semibold flex items-center justify-center gap-2 hover:bg-slate-200 transition-all group shadow-xl shadow-white/5 cursor-pointer">
             Start Proving Free <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </Link>
-        <button className="w-full sm:w-auto px-8 py-4 bg-white/5 border border-white/10 rounded-full font-semibold hover:bg-white/10 transition-all backdrop-blur-md cursor-pointer">
+       <Link href='/how-it-works' className='cursor-pointer'>
+             <button className="w-full sm:w-auto px-8 py-4 bg-white/5 border border-white/10 rounded-full font-semibold hover:bg-white/10 transition-all backdrop-blur-md cursor-pointer">
           See How It Works
-        </button>
+          </button>
+       </Link>
       </div>
     </section>
   );

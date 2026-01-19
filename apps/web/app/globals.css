@@ -44,8 +44,32 @@ body {
 }
 
 ::selection {
-  background: white;
-  color: black;
+  background: rgba(59, 130, 246, 0.3);
+  color: white;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #3b82f6; 
 }
 
 @keyframes fade-in {
