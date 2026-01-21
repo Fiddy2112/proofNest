@@ -1,0 +1,6 @@
+{
+  "solidity.remappings": [
+    "@openzeppelin/contracts/=../../node_modules/@openzeppelin/contracts/",
+    "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/"
+  ]
+}

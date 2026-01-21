@@ -12,14 +12,18 @@ import {
   Globe,
   FileText,
   Users,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
+import { toastError, toastSuccess } from "@/utils/notifi";
+import { getPlanPrice, subscribeToPlan } from "@/lib/contract";
+import { useRouter } from "next/navigation";
 
 const plans = [
   {
     name: "Free",
     description: "For casual use and trying things out",
-    price: "$0",
+    price: 0,
     period: "forever",
     cta: "Get Started",
     ctaLink: "/dashboard",
@@ -39,7 +43,7 @@ const plans = [
   {
     name: "Pro",
     description: "For professionals who create regularly",
-    price: "$19",
+    price: 19,
     period: "per month",
     cta: "Start Pro Trial",
     ctaLink: "/dashboard",
@@ -58,7 +62,7 @@ const plans = [
   {
     name: "Team",
     description: "For teams collaborating on intellectual property",
-    price: "$49",
+    price: 49,
     period: "per month",
     cta: "Contact Sales",
     ctaLink: "/dashboard",
@@ -142,6 +146,53 @@ export default function PricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">(
     "monthly"
   );
+
+  const [annualSave, setAnnualSave] = useState(25);
+
+  const router = useRouter();
+  const [loading, setLoading] = useState<number | null>(null);
+
+  const handleSubscribe = async (index:number)=>{
+    if(index === 0){
+      router.push("/dashboard");
+      return;
+    }
+
+    try{
+      setLoading(index);
+      
+      const planId = index;
+      const isAnnual = billingPeriod === 'annual';
+
+      console.log(`Fetching price for Plan ${planId}, Annual: ${isAnnual}...`);
+
+      const priceWei = await getPlanPrice(planId, isAnnual);
+
+      if(priceWei === BigInt(0)){
+        toastError(3000, "This plan is currently under maintenance or not activated!");
+        return;
+      }
+
+      const txHash = await subscribeToPlan(planId, isAnnual, priceWei);
+
+      console.log("Transaction sent:", txHash);
+
+      toastSuccess(3000,"Payment successful! Redirecting...");
+
+      router.push("/dashboard");
+      
+    }catch(error){
+      console.error("Payment failed:", error);
+      const msg = (error as any)?.message || "An error occurred";
+      if (msg.includes("User rejected")) {
+        toastError(3000, "You've canceled the transaction.");
+      } else {
+        toastError(3000, "Payment failed: " + msg);
+      }
+    }finally {
+      setLoading(null);
+    }
+  }
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -252,7 +303,7 @@ export default function PricingPage() {
             }`}
           >
             Annual{" "}
-            <span className="text-emerald-400 text-xs ml-1">Save 20%</span>
+            <span className="text-emerald-400 text-xs ml-1">Save {annualSave}%</span>
           </span>
         </div>
       </section>
@@ -285,36 +336,43 @@ export default function PricingPage() {
               <div className="text-center mb-8">
                 <div className="flex items-baseline justify-center gap-1">
                   <span className="text-4xl font-bold text-white">
-                    {billingPeriod === "annual" && plan.price !== "$0"
+                    {billingPeriod === "annual" && plan.price !== 0
                       ? "$" +
-                        (parseInt(plan.price.replace("$", "")) * 0.8).toFixed(0)
-                      : plan.price.replace("$", "")}
+                        (plan.price * annualSave / 100).toFixed(0)
+                      : plan.price}
                   </span>
                   <span className="text-slate-500 text-sm">/month</span>
                 </div>
-                {billingPeriod === "annual" && plan.price !== "$0" && (
+                {billingPeriod === "annual" && plan.price !== 0 && (
                   <p className="text-slate-600 text-xs mt-2">
                     Billed{" "}
                     {billingPeriod === "annual"
                       ? "$" +
-                        parseInt(plan.price.replace("$", "")) * 0.8 * 12 +
+                        (plan.price * annualSave / 100) * 12 +
                         "/year"
                       : ""}
                   </p>
                 )}
               </div>
 
-              <Link href={plan.ctaLink}>
-                <button
-                  className={`w-full py-3 rounded-xl font-semibold text-sm transition-all cursor-pointer mb-8 ${
-                    plan.popular
-                      ? "bg-white text-black hover:bg-slate-200"
-                      : "bg-white/10 text-white hover:bg-white/20"
-                  }`}
-                >
-                  {plan.cta}
-                </button>
-              </Link>
+              <button
+                disabled={loading !== null}
+                onClick={() => handleSubscribe(index)}
+                className={`w-full py-3 rounded-xl font-semibold text-sm transition-all cursor-pointer mb-8 flex items-center justify-center gap-2 ${
+                  plan.popular
+                    ? "bg-white text-black hover:bg-slate-200"
+                    : "bg-white/10 text-white hover:bg-white/20"
+                } ${loading !== null ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                {loading === index ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  plan.cta
+                )}
+              </button>
 
               <div className="space-y-4">
                 {plan.features.map((feature, i) => (
