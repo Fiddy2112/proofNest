@@ -16,6 +16,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
+    if (loading) return;
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -144,7 +145,7 @@ export default function LoginPage() {
 
             <button
               disabled={loading}
-              className="w-full bg-white text-black font-bold py-4 rounded-2xl mt-4 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
+              className={`w-full bg-white text-black font-bold py-4 rounded-2xl mt-4 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 ${loading ? " opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Enter Workspace <ArrowRight className="w-4 h-4" /></>}
             </button>

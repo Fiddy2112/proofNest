@@ -18,6 +18,7 @@ import Link from "next/link";
 import { toastError, toastSuccess } from "@/utils/notifi";
 import { getPlanPrice, subscribeToPlan } from "@/lib/contract";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 const plans = [
   {
@@ -147,12 +148,21 @@ export default function PricingPage() {
     "monthly"
   );
 
-  const [annualSave, setAnnualSave] = useState(25);
+  // annual save
+  const [annualSave, setAnnualSave] = useState(20);
 
   const router = useRouter();
   const [loading, setLoading] = useState<number | null>(null);
 
   const handleSubscribe = async (index:number)=>{
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login"); 
+      return;
+    }
+
     if(index === 0){
       router.push("/dashboard");
       return;
@@ -164,9 +174,8 @@ export default function PricingPage() {
       const planId = index;
       const isAnnual = billingPeriod === 'annual';
 
-      console.log(`Fetching price for Plan ${planId}, Annual: ${isAnnual}...`);
-
       const priceWei = await getPlanPrice(planId, isAnnual);
+      
 
       if(priceWei === BigInt(0)){
         toastError(3000, "This plan is currently under maintenance or not activated!");
@@ -175,7 +184,23 @@ export default function PricingPage() {
 
       const txHash = await subscribeToPlan(planId, isAnnual, priceWei);
 
-      console.log("Transaction sent:", txHash);
+      const response = await fetch("/api/verify-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txHash,
+          userAddress: user.email,
+          userId: user.id,
+          planId,
+          isAnnual
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Payment Authentication Error");
+      }
 
       toastSuccess(3000,"Payment successful! Redirecting...");
 
@@ -338,7 +363,7 @@ export default function PricingPage() {
                   <span className="text-4xl font-bold text-white">
                     {billingPeriod === "annual" && plan.price !== 0
                       ? "$" +
-                        (plan.price * annualSave / 100).toFixed(0)
+                        (plan.price * (100 - annualSave) / 100).toFixed(0)
                       : plan.price}
                   </span>
                   <span className="text-slate-500 text-sm">/month</span>
@@ -348,7 +373,7 @@ export default function PricingPage() {
                     Billed{" "}
                     {billingPeriod === "annual"
                       ? "$" +
-                        (plan.price * annualSave / 100) * 12 +
+                        (Math.round(plan.price * (100 - annualSave) / 100) * 12) +
                         "/year"
                       : ""}
                   </p>

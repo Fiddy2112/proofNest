@@ -61,18 +61,24 @@ export const subscribeToPlan = async(planId:number, isAnnual:boolean, priceInWei
 }
 
 export const createProofOnChain = async (contentHash: string)=>{
-    const wallet = await getWalletClient();
-    const [account] = await wallet.requestAddresses();
+    try{
+        const wallet = await getWalletClient();
+        const [account] = await wallet.requestAddresses();
 
-    const formattedHash = contentHash.startsWith('0x') ? contentHash : `0x${contentHash}`;
+        const formattedHash = contentHash.startsWith('0x') ? contentHash : `0x${contentHash}`;
 
-    const hash = await wallet.writeContract({
-        address: CONTRACT_ADDRESS,
-        abi: PROOF_NEST_ABI,
-        functionName: 'addProof',
-        args: [formattedHash as `0x${string}`],
-        account: account
-    });
+        const hash = await wallet.writeContract({
+            address: CONTRACT_ADDRESS,
+            abi: PROOF_NEST_ABI,
+            functionName: 'addProof',
+            args: [formattedHash as `0x${string}`],
+            account: account
+        });
 
-    return hash;
+        return hash;
+    }catch(error){
+        toastError(3000 ,(error as any)?.message || "Error creating proof");
+        console.error("Error creating proof:", error);
+        return null;
+    }
 }

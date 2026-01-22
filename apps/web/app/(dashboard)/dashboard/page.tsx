@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { formatAddress, generateContentHash } from "@proofnest/core";
+import { generateContentHash } from "@proofnest/core";
 import {
   CheckCircle2,
   Fingerprint,
@@ -22,11 +22,14 @@ import {
   Wand2,
   EyeOff,
   Eye,
+  Copy,
+  Wallet,
 } from "lucide-react";
 import { toastError, toastSuccess } from "@/utils/notifi";
 import { createClient } from "@/lib/supabase/client";
 import { authService } from "@/lib/supabase/auth-service";
 import { dbService } from "@/lib/supabase/db-service";
+import { createProofOnChain, getWalletClient } from "@/lib/contract";
 import CreateFolderModal from "@/components/modals/CreateFolderModal";
 import { FileExplorer } from "@/components/dashboard/FileExplorer";
 import { refineContent } from "@/app/actions/ai";
@@ -58,6 +61,7 @@ type Proof = {
   status: string;
   folder_id: string | null;
   note_id: string;
+  tx_hash?: string;
   notes?: {
     content: string;
   };
@@ -88,7 +92,10 @@ export default function DashboardPage() {
   const [recentProofs, setRecentProofs] = useState<Proof[]>([]);
   const [filteredProofs, setFilteredProofs] = useState<Proof[]>([]);
   const [stats, setStats] = useState<Stats>({ totalProofs: 0, totalFolders: 0, thisMonth: 0 });
+
+  // User State
   const [user, setUser] = useState<User | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -119,6 +126,17 @@ export default function DashboardPage() {
     if (user.user_metadata?.name) return user.user_metadata.name;
     if (user.email) return user.email.split("@")[0];
     return "User";
+  };
+
+  const handleConnectWallet = async () => {
+    try {
+      const client = await getWalletClient();
+      const [address] = await client.requestAddresses();
+      setWalletAddress(address);
+      toastSuccess(3000, "Wallet connected!");
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const getUserInitials = () => {
@@ -241,6 +259,21 @@ export default function DashboardPage() {
     setFilteredProofs(filtered);
   }, [recentProofs, searchQuery, statusFilter]);
 
+  useEffect(() => {
+    const checkWallet = async () => {
+      if (typeof window !== 'undefined' && window.ethereum) {
+        try {
+          const client = await getWalletClient();
+          const [address] = await client.requestAddresses();
+          setWalletAddress(address);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    };
+    checkWallet();
+  }, []);
+
   const navigateToFolder = (folderId: string | null) => {
     const url = folderId ? `/dashboard?folderId=${folderId}` : "/dashboard";
     window.history.pushState({}, "", url);
@@ -295,6 +328,8 @@ export default function DashboardPage() {
   const handleCreateProof = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!demoInput || demoState !== "idle") return;
+    
+
     setDemoState("hashing");
     const hash = generateContentHash(demoInput);
     setActiveHash(hash);
@@ -307,6 +342,13 @@ export default function DashboardPage() {
         return;
       }
 
+      try{
+        await getWalletClient();
+      }catch(err){
+        toastError(4000, "Please connect MetaMask to secure your proof on-chain!");
+        return;
+      }
+
       await dbService.createProofEntry(
         currentUser.id,
         demoInput,
@@ -314,16 +356,40 @@ export default function DashboardPage() {
         selectedFolderId || undefined
       );
 
-      setTimeout(() => {
-        setDemoState("anchoring");
-        setTimeout(() => {
-          setDemoState("proved");
-          fetchStats();
-        }, 1500);
-      }, 1500);
-    } catch (err) {
+      setDemoState("anchoring");
+      
+      const txHash = await createProofOnChain(hash);
+      console.log("Blockchain Tx:", txHash);
+
+      const { error: updateError } = await supabase
+        .from('proofs')
+        .update({ 
+            tx_hash: txHash,
+            status: 'confirmed' 
+        })
+        .match({ content_hash: hash, user_id: currentUser.id });
+
+      if (updateError) {
+        console.error("Failed to update DB with TxHash:", updateError);
+        toastError(3000, "Proof on chain but DB update failed");
+      }
+
+      setDemoState("proved");
+      toastSuccess(4000, "Successfully secured on Sepolia Testnet!");
+      
+      fetchStats();
+
+    } catch (err: any) {
       setDemoState("idle");
-      toastError(5000, "Something went wrong");
+      console.error(err);
+      
+      if (err.message && err.message.includes("User rejected")) {
+        toastError(3000, "Transaction rejected by user");
+      } else if (err.message && err.message.includes("Proof already exists")) {
+        toastError(3000, "This content is already proven on-chain!");
+      } else {
+        toastError(5000, "Failed to create proof on blockchain");
+      }
     }
   };
 
@@ -394,6 +460,7 @@ export default function DashboardPage() {
   return (
     <div className="h-full flex overflow-hidden bg-[#050505] selection:bg-blue-500/30">
       
+      {/* Sidebar */}
       <div className="hidden xl:flex w-64 border-r border-white/5 flex-col bg-[#080808]">
         <div className="p-6 pb-2">
           <div className="flex items-center justify-between text-slate-500 uppercase font-mono text-[10px] tracking-[0.2em] mb-6">
@@ -483,12 +550,45 @@ export default function DashboardPage() {
               <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
             </div>
           </div>
+
+          <div className="mb-3">
+            {!walletAddress ? (
+              <button 
+                onClick={handleConnectWallet}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white/5 hover:bg-blue-500/10 border border-white/5 hover:border-blue-500/30 text-[10px] text-slate-300 hover:text-blue-400 transition-all group"
+              >
+                <Wallet className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                <span>Connect Wallet</span>
+              </button>
+            ) : (
+              <div 
+                onClick={() => {
+                    navigator.clipboard.writeText(walletAddress);
+                    toastSuccess(2000, "Address copied!");
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 cursor-pointer hover:bg-emerald-500/10 transition-all group"
+                title="Click to copy"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </div>
+                  <span className="text-[10px] font-mono text-emerald-400 font-medium">
+                    {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                  </span>
+                </div>
+                <Copy className="w-3 h-3 text-emerald-500/50 group-hover:text-emerald-400 transition-colors" />
+              </div>
+            )}
+          </div>
           <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-white/5 text-[10px] text-slate-500 hover:text-white hover:bg-white/5 transition-all uppercase tracking-widest">
             <LogOut className="w-3 h-3" /> Sign Out
           </button>
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#050505] relative">
         
         <header className="h-16 border-b border-white/5 flex items-center justify-between px-6 shrink-0 bg-[#050505]/80 backdrop-blur-sm z-10">
@@ -520,7 +620,7 @@ export default function DashboardPage() {
                 <>
                   <span className="mx-2 text-slate-700">/</span>
                   <span className="text-white font-bold transition-all backdrop-blur-md px-2 py-0.5 rounded bg-white/5">
-                     {selectedFile ? 'view_proof.md' : 'new_proof.md'}
+                      {selectedFile ? 'view_proof.md' : 'new_proof.md'}
                   </span>
                 </>
               )}
@@ -561,8 +661,8 @@ export default function DashboardPage() {
               <>
                 {isLoading ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
-                     <LoaderCircle className="w-8 h-8 animate-spin mb-4 opacity-50"/>
-                     <p className="text-xs font-mono uppercase tracking-widest">Loading data...</p>
+                      <LoaderCircle className="w-8 h-8 animate-spin mb-4 opacity-50"/>
+                      <p className="text-xs font-mono uppercase tracking-widest">Loading data...</p>
                   </div>
                 ) : (
                   <FileExplorer 
@@ -586,10 +686,10 @@ export default function DashboardPage() {
                       <div className="w-3 h-3 rounded-full bg-yellow-500/20 border border-yellow-500/30" />
                       <div className="w-3 h-3 rounded-full bg-green-500/20 border border-green-500/30" />
                       <div className="ml-4 h-full flex items-center px-4 border-x border-white/5 bg-white/2">
-                         <FileText className="w-3.5 h-3.5 text-blue-400 mr-2" />
-                         <span className="text-xs text-slate-400 font-mono">
+                          <FileText className="w-3.5 h-3.5 text-blue-400 mr-2" />
+                          <span className="text-xs text-slate-400 font-mono">
                             {selectedFile ? 'read_only_mode' : 'write_mode'}
-                         </span>
+                          </span>
                       </div>
                       {!selectedFile && (
                           <div className="flex items-center gap-2">
@@ -638,11 +738,11 @@ export default function DashboardPage() {
                       }
                       
                       <div className="pt-6 border-t border-white/5 flex items-center justify-between">
-                         <span className="text-[10px] font-mono text-slate-600 uppercase">
+                          <span className="text-[10px] font-mono text-slate-600 uppercase">
                            {demoInput.length} chars / UTF-8
-                         </span>
-                         {!selectedFile && (
-                           <button
+                          </span>
+                          {!selectedFile && (
+                            <button
                               onClick={handleCreateProof}
                               disabled={demoInput.length <= 0 || demoState !== "idle"}
                               className="bg-white text-black px-6 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-blue-50 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
@@ -650,13 +750,13 @@ export default function DashboardPage() {
                               {demoState === 'idle' ? 'Fingerprint Data' : 'Processing...'} 
                               <Fingerprint className="w-3.5 h-3.5" />
                             </button>
-                         )}
+                          )}
                       </div>
                     </div>
                   </div>
 
                   <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-white/10 bg-[#080808] p-8 flex flex-col items-center justify-center text-center">
-                     {demoState === "idle" && (
+                      {demoState === "idle" && (
                         <div className="space-y-4 opacity-50">
                           <Database className="w-12 h-12 text-slate-700 mx-auto" />
                           <p className="text-[10px] font-mono text-slate-600 uppercase tracking-widest">Ready to Index</p>
@@ -671,7 +771,7 @@ export default function DashboardPage() {
                             <Shield className="absolute inset-0 m-auto w-6 h-6 text-blue-400 animate-pulse" />
                           </div>
                           <p className="text-xs font-bold text-blue-400 uppercase tracking-widest animate-pulse">
-                            {demoState === 'hashing' ? 'Hashing...' : 'Anchoring...'}
+                            {demoState === 'hashing' ? 'Hashing...' : 'Anchoring to Sepolia...'}
                           </p>
                         </div>
                       )}
@@ -687,14 +787,14 @@ export default function DashboardPage() {
                            </div>
                            
                            <div className="w-full bg-white/5 rounded-lg p-3 text-left space-y-2 border border-white/5">
-                              <div>
-                                <p className="text-[9px] text-slate-500 font-bold uppercase">Hash</p>
-                                <p className="text-[10px] text-slate-300 font-mono truncate">{activeHash}</p>
-                              </div>
-                              <div>
-                                <p className="text-[9px] text-slate-500 font-bold uppercase">Time</p>
-                                <p className="text-[10px] text-slate-300 font-mono">{new Date().toLocaleTimeString()}</p>
-                              </div>
+                             <div>
+                               <p className="text-[9px] text-slate-500 font-bold uppercase break-all">Hash</p>
+                               <a href={`https://sepolia.etherscan.io/tx/${activeHash}`} className="text-[10px] text-slate-300 font-mono break-all">{activeHash}</a>
+                             </div>
+                             <div>
+                               <p className="text-[9px] text-slate-500 font-bold uppercase">Time</p>
+                               <p className="text-[10px] text-slate-300 font-mono">{new Date().toLocaleTimeString()}</p>
+                             </div>
                            </div>
                            
                            <button 
@@ -716,6 +816,7 @@ export default function DashboardPage() {
 
       <CreateFolderModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={handleAddFolder} />
       
+      {/* Edit & Delete Modals */}
       {isEditModalOpen && selectedFolder && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 w-full max-w-md">
@@ -733,7 +834,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-
 
       {isDeleteModalOpen && selectedFolder && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
