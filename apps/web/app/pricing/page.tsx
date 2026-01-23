@@ -13,6 +13,7 @@ import {
   FileText,
   Users,
   Loader2,
+  CheckCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { toastError, toastSuccess } from "@/utils/notifi";
@@ -147,6 +148,7 @@ export default function PricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">(
     "monthly"
   );
+  const [currentPlanId, setCurrentPlanId] = useState<number>(0);
 
   // annual save
   const [annualSave, setAnnualSave] = useState(20);
@@ -184,7 +186,7 @@ export default function PricingPage() {
 
       const txHash = await subscribeToPlan(planId, isAnnual, priceWei);
 
-      const response = await fetch("/api/verify-payment", {
+      const response = await fetch("/api/billing/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -218,6 +220,34 @@ export default function PricingPage() {
       setLoading(null);
     }
   }
+
+  useEffect(() => {
+    const checkCurrentPlan = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setCurrentPlanId(0);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('subscriptions')
+        .select('plan_id, status, expires_at')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (data) {
+        setCurrentPlanId(data.plan_id);
+      } else {
+        setCurrentPlanId(0);
+      }
+    };
+
+    checkCurrentPlan();
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -381,24 +411,34 @@ export default function PricingPage() {
               </div>
 
               <button
-                disabled={loading !== null}
-                onClick={() => handleSubscribe(index)}
-                className={`w-full py-3 rounded-xl font-semibold text-sm transition-all cursor-pointer mb-8 flex items-center justify-center gap-2 ${
-                  plan.popular
-                    ? "bg-white text-black hover:bg-slate-200"
-                    : "bg-white/10 text-white hover:bg-white/20"
-                } ${loading !== null ? "opacity-50 cursor-not-allowed" : ""}`}
+                disabled={loading !== null || index === currentPlanId}
+                onClick={() => {
+                  if (index === currentPlanId) return;
+                  handleSubscribe(index);
+                }}
+                className={`w-full py-3 rounded-xl font-semibold text-sm transition-all mb-8 flex items-center justify-center gap-2 
+                  ${
+                    index === currentPlanId
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-default"
+                      : plan.popular
+                      ? "bg-white text-black hover:bg-slate-200 cursor-pointer"
+                      : "bg-white/10 text-white hover:bg-white/20 cursor-pointer"
+                  } 
+                  ${loading !== null && loading !== index ? "opacity-50" : ""}
+                `}
               >
                 {loading === index ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Processing...
+                    <Loader2 className="w-4 h-4 animate-spin" /> Processing...
+                  </>
+                ) : index === currentPlanId ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" /> Current Plan
                   </>
                 ) : (
                   plan.cta
                 )}
               </button>
-
               <div className="space-y-4">
                 {plan.features.map((feature, i) => (
                   <div key={i} className="flex items-start gap-3">

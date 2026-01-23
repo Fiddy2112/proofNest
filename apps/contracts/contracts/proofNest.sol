@@ -7,10 +7,10 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 contract ProofNest is Ownable,Pausable {
 
   struct Plan {
-      string name;
-      uint256 monthlyPrice;
-      uint256 annualDiscount;
-      bool isActive;
+    string name;
+    uint256 monthlyPrice;
+    uint256 annualDiscount;
+    bool isActive;
   }
 
   struct Subscription {
@@ -51,6 +51,9 @@ contract ProofNest is Ownable,Pausable {
     uint256 timestamp
   );
 
+  uint256 public constant FREE_LIMIT = 3;
+  mapping(address => uint256) public freeUsage;
+
   mapping(uint256 => Plan) public plans;
 
   mapping(address => Subscription) public subscriptions;
@@ -60,16 +63,16 @@ contract ProofNest is Ownable,Pausable {
   constructor() Ownable(msg.sender) {
     plans[1] = Plan({
       name: "Pro",
-      monthlyPrice: 0.01 ether,
+      monthlyPrice: 0.0064 ether,
       annualDiscount: 20,
       isActive: true
     });
 
     plans[2] = Plan({
       name: "Team",
-      monthlyPrice: 0.05 ether,
-      annualDiscount: 30,
-            isActive: true
+      monthlyPrice: 0.0164 ether,
+      annualDiscount: 20,
+      isActive: true
     });
   }
 
@@ -91,7 +94,7 @@ contract ProofNest is Ownable,Pausable {
 
   function subscribe(uint256 planId, bool isAnnual) external payable whenNotPaused{
     uint256 price = getPrice(planId, isAnnual);
-    require(msg.value == price, "Incorrect ETH amount");
+    require(msg.value >= price, "Incorrect ETH amount");
 
     uint256 duration = isAnnual ? 365 days : 30 days;
     Subscription storage sub = subscriptions[msg.sender];
@@ -118,6 +121,13 @@ contract ProofNest is Ownable,Pausable {
   function addProof(bytes32 contentHash) external whenNotPaused{
     require(hasActiveSubscription(msg.sender), "No active subscription");
     require(proofs[contentHash].owner == address(0) , "Proof already exists");
+
+    bool isVip = hasActiveSubscription(msg.sender);
+
+    if (!isVip) {
+      require(freeUsage[msg.sender] < FREE_LIMIT, "Free limit reached (3/3). Upgrade to Pro!");
+      freeUsage[msg.sender]++;
+    }
 
     proofs[contentHash] = Proof({
       owner : msg.sender,

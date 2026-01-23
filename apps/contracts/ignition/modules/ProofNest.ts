@@ -12,4 +12,4 @@ const ProofNestModule = buildModule("ProofNestModule", (m) => {
 
 export default ProofNestModule;
 
-// ProofNestModule#ProofNest - 0xC01e60c898ae81AAfa059ae25EF495b62c08F56f
+// ProofNestModule#ProofNest - 0x1EB671894900576462Fa00aF882911a4345dEd73

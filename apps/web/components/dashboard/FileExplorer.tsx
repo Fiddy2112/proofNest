@@ -1,15 +1,16 @@
 "use client";
 
-import { FileText, Folder, MoreVertical } from "lucide-react";
+import { FileText, Folder, MoreVertical, Trash2 } from "lucide-react";
 
 type Props = {
     folders: any[];
     files: any[];
     onFolderClick: (folderId: string) => void;
     onFileClick: (file: any) => void;
+    onDeleteFile:(fileId:string)=>void;
 }
 
-export const FileExplorer = ({folders, files, onFolderClick, onFileClick}: Props)=>{
+export const FileExplorer = ({folders, files, onFolderClick, onFileClick, onDeleteFile}: Props)=>{
     if(folders.length === 0 && files.length === 0){
         return (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 opacity-50">
@@ -58,6 +59,15 @@ export const FileExplorer = ({folders, files, onFolderClick, onFileClick}: Props
                     {file.content_hash.slice(0, 8)}...
                     </p>
                 </div>
+                <button 
+                    onClick={(e) => {
+                        e.stopPropagation(); 
+                        onDeleteFile(file.id); 
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 cursor-pointer"
+                >
+                    <Trash2 className="w-3 h-3" />
+                </button>
                 </div>
             ))}
         </div>

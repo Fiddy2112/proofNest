@@ -24,6 +24,8 @@ import {
   Eye,
   Copy,
   Wallet,
+  ArrowRight,
+  Loader2,
 } from "lucide-react";
 import { toastError, toastSuccess } from "@/utils/notifi";
 import { createClient } from "@/lib/supabase/client";
@@ -73,6 +75,8 @@ type Stats = {
   thisMonth: number;
 };
 
+type PlanType = "FREE" | "PRO" | "TEAM";
+
 export default function DashboardPage() {
   // --- Hooks & Params ---
   const searchParams = useSearchParams();
@@ -92,10 +96,12 @@ export default function DashboardPage() {
   const [recentProofs, setRecentProofs] = useState<Proof[]>([]);
   const [filteredProofs, setFilteredProofs] = useState<Proof[]>([]);
   const [stats, setStats] = useState<Stats>({ totalProofs: 0, totalFolders: 0, thisMonth: 0 });
+  const [currentPlan, setCurrentPlan] = useState<PlanType>("FREE");
 
   // User State
   const [user, setUser] = useState<User | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [confirmedTxHash, setConfirmedTxHash] = useState<string | null>(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -118,6 +124,9 @@ export default function DashboardPage() {
 
   // Preview State
   const [isPreview, setIsPreview] = useState(false);
+
+  // Upgrade Modal State
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // --- Helper Functions ---
   const getUserDisplayName = () => {
@@ -210,6 +219,35 @@ export default function DashboardPage() {
     setIsAiProcessing(false);
   }
 
+  const checkUserLimit = async ()=>{
+    const currentUser = await authService.getCurrentUser();
+    if (!currentUser) return false;
+
+    let limit = 3;
+    if(currentPlan === 'PRO') limit = 100;
+    if (currentPlan === 'TEAM') limit = 1000;
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const {count, error} = await supabase.from('proofs').select('*', {count: 'exact', head: true}).eq('user_id', currentUser.id).gte('created_at', startOfMonth.toISOString());
+
+    if(error){
+      console.error("Check limit error", error);
+      return true;
+    }
+
+    const currentUsage = count || 0;
+    
+    if(currentUsage >= limit){
+      setShowUpgradeModal(true);
+      return false;
+    }
+
+    return true;
+  }
+
   // --- Effects ---
   const loadData = useCallback(async () => {
     const currentUser = await authService.getCurrentUser();
@@ -274,6 +312,34 @@ export default function DashboardPage() {
     checkWallet();
   }, []);
 
+  useEffect(()=>{
+    const checkSubscription = async ()=>{
+      const currentUser = await authService.getCurrentUser();
+      if (!currentUser) {
+        setCurrentPlan("FREE");
+        return;
+      }
+
+      const {data} = await supabase.from('subscriptions')
+      .select('plan_id, status, expires_at')
+      .eq('user_id', currentUser.id)
+      .eq('status', 'active')
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+      if (data) {
+        if (data.plan_id === 1) setCurrentPlan("PRO");
+        else if (data.plan_id === 2) setCurrentPlan("TEAM");
+        else setCurrentPlan("FREE");
+      } else {
+        setCurrentPlan("FREE");
+      }
+    
+    }
+    
+    checkSubscription();
+  },[])
+
   const navigateToFolder = (folderId: string | null) => {
     const url = folderId ? `/dashboard?folderId=${folderId}` : "/dashboard";
     window.history.pushState({}, "", url);
@@ -328,11 +394,15 @@ export default function DashboardPage() {
   const handleCreateProof = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!demoInput || demoState !== "idle") return;
-    
 
+    const canCreate = await checkUserLimit();
+    if (!canCreate) return;
+    
+    setConfirmedTxHash(null);
     setDemoState("hashing");
     const hash = generateContentHash(demoInput);
     setActiveHash(hash);
+    console.log("Generated Content Hash:", hash);
 
     try {
       const currentUser = await authService.getCurrentUser();
@@ -346,9 +416,17 @@ export default function DashboardPage() {
         await getWalletClient();
       }catch(err){
         toastError(4000, "Please connect MetaMask to secure your proof on-chain!");
+        setDemoState("idle");
         return;
       }
 
+      setDemoState("anchoring");
+      
+      const txHash = await createProofOnChain(hash);
+      console.log("Blockchain Tx:", txHash);
+      setConfirmedTxHash(txHash);
+
+      console.log("Saving to DB (Pending)...");
       await dbService.createProofEntry(
         currentUser.id,
         demoInput,
@@ -356,10 +434,6 @@ export default function DashboardPage() {
         selectedFolderId || undefined
       );
 
-      setDemoState("anchoring");
-      
-      const txHash = await createProofOnChain(hash);
-      console.log("Blockchain Tx:", txHash);
 
       const { error: updateError } = await supabase
         .from('proofs')
@@ -384,14 +458,47 @@ export default function DashboardPage() {
       console.error(err);
       
       if (err.message && err.message.includes("User rejected")) {
-        toastError(3000, "Transaction rejected by user");
-      } else if (err.message && err.message.includes("Proof already exists")) {
-        toastError(3000, "This content is already proven on-chain!");
-      } else {
-        toastError(5000, "Failed to create proof on blockchain");
+        toastError(3000, "Transaction rejected.");
+      }
+
+      else if (err.message && err.message.includes("Proof already exists")) {
+        toastError(3000, "This content is already on-chain!");
+      }
+
+      else if (err.message && err.message.includes("Free limit reached")) {
+        setShowUpgradeModal(true);
+      }
+
+      else {
+        toastError(5000, "Transaction Failed. Please check console.");
       }
     }
   };
+
+  const handleDeleteProof = async () => {
+    if (!selectedFolder && !selectedFile) return;
+  };
+
+  const deleteSingleProof = async (proofId: string, proofHash: string) => {
+    if(!confirm("Delete this proof from Dashboard? (Blockchain record remains)")) return;
+    
+    setIsLoading(true);
+    try {
+        const { error } = await supabase
+            .from('proofs')
+            .delete()
+            .eq('id', proofId);
+            
+        if(error) throw error;
+        
+        toastSuccess(3000, "Proof deleted form DB");
+        fetchProofs(selectedFolderId, searchQuery, statusFilter);
+    } catch (error) {
+        toastError(3000, "Failed to delete");
+    } finally {
+        setIsLoading(false);
+    }
+  }
 
   const handleAddFolder = async (name: string) => {
     const currentUser = await authService.getCurrentUser();
@@ -670,6 +777,7 @@ export default function DashboardPage() {
                     files={filteredProofs} 
                     onFolderClick={(id) => navigateToFolder(id)}
                     onFileClick={(file: Proof) => handleOpenFile(file)}
+                    onDeleteFile={(fileId:string)=>deleteSingleProof(fileId, activeHash)}
                   />
                 )}
               </>
@@ -717,7 +825,7 @@ export default function DashboardPage() {
                         )}
                     </div>
 
-                    <div className="flex-1 p-6 md:p-8 flex flex-col overflow-y-auto custom-scrollbar">
+                    <div className="flex-1 p-6 md:p-8 flex flex-col overflow-y-auto custom-scrollbar relative">
                       {
                         isPreview ? (
                           <div className="prose prose-invert prose-sm max-w-none">
@@ -736,6 +844,13 @@ export default function DashboardPage() {
                           />
                         )
                       }
+
+                      { isAiProcessing && <div className="absolute inset-0 bg-black/50"
+                      >
+                        <div className="flex items-center justify-center h-full">
+                          <Loader2 className="w-12 h-12 animate-spin" />
+                        </div>
+                       </div>}
                       
                       <div className="pt-6 border-t border-white/5 flex items-center justify-between">
                           <span className="text-[10px] font-mono text-slate-600 uppercase">
@@ -745,7 +860,7 @@ export default function DashboardPage() {
                             <button
                               onClick={handleCreateProof}
                               disabled={demoInput.length <= 0 || demoState !== "idle"}
-                              className="bg-white text-black px-6 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-blue-50 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                              className={`bg-white text-black px-6 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-blue-50 disabled:opacity-20 disabled:cursor-not-allowed transition-all ${demoState === 'idle' ? 'cursor-pointer' : 'cursor-not-allowed'}`}
                             >
                               {demoState === 'idle' ? 'Fingerprint Data' : 'Processing...'} 
                               <Fingerprint className="w-3.5 h-3.5" />
@@ -776,6 +891,20 @@ export default function DashboardPage() {
                         </div>
                       )}
 
+                      {confirmedTxHash && (
+                          <div className="mt-2">
+                              <p className="text-[9px] text-blue-500 font-bold uppercase">Transaction Hash</p>
+                              <a 
+                                  href={`https://sepolia.etherscan.io/tx/${confirmedTxHash}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[10px] text-blue-400 font-mono truncate hover:underline flex items-center gap-1"
+                              >
+                                  {confirmedTxHash} ↗
+                              </a>
+                          </div>
+                      )}
+
                       {demoState === "proved" && (
                         <div className="space-y-6 animate-in zoom-in duration-300">
                            <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.1)]">
@@ -789,7 +918,7 @@ export default function DashboardPage() {
                            <div className="w-full bg-white/5 rounded-lg p-3 text-left space-y-2 border border-white/5">
                              <div>
                                <p className="text-[9px] text-slate-500 font-bold uppercase break-all">Hash</p>
-                               <a href={`https://sepolia.etherscan.io/tx/${activeHash}`} className="text-[10px] text-slate-300 font-mono break-all">{activeHash}</a>
+                               <p className="text-[10px] text-slate-300 font-mono break-all">{activeHash}</p>
                              </div>
                              <div>
                                <p className="text-[9px] text-slate-500 font-bold uppercase">Time</p>
@@ -847,6 +976,66 @@ export default function DashboardPage() {
               <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 rounded-xl font-semibold text-sm text-slate-400 hover:bg-white/5 transition-all">Cancel</button>
               <button onClick={handleDeleteFolder} className="flex-1 py-3 rounded-xl font-semibold text-sm bg-red-500 text-white hover:bg-red-600 transition-all">Delete & Move</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showUpgradeModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0a0a0a] border border-orange-500/20 rounded-3xl p-8 w-full max-w-md relative overflow-hidden shadow-[0_0_50px_rgba(249,115,22,0.1)]">
+            
+            <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+
+            <button 
+              onClick={() => setShowUpgradeModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/5 text-slate-500 hover:text-white transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-linear-to-tr from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-500/20 rotate-3">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+              
+              <h3 className="text-2xl font-bold text-white mb-2">Limit Reached</h3>
+              <p className="text-slate-400 text-sm">
+                You've used all <span className="text-white font-bold">3 free proofs</span> for this month.
+                Upgrade to Pro to secure unlimited content forever.
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-8 bg-white/5 rounded-xl p-4 border border-white/5">
+              <div className="flex items-center gap-3 text-sm text-slate-300">
+                <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
+                <span>Unlimited Blockchain Proofs</span>
+              </div>
+              <div className="flex items-center gap-3 text-sm text-slate-300">
+                <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
+                <span>Priority Support</span>
+              </div>
+              <div className="flex items-center gap-3 text-sm text-slate-300">
+                <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />
+                <span>Advanced Analytics</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => window.location.href = '/pricing'}
+                className="w-full py-3.5 rounded-xl font-bold text-sm bg-linear-to-r from-orange-500 to-amber-600 text-white hover:opacity-90 transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2"
+              >
+                Upgrade to Pro - $19/mo <ArrowRight className="w-4 h-4" />
+              </button>
+              
+              <button 
+                onClick={() => setShowUpgradeModal(false)}
+                className="w-full py-3 rounded-xl font-semibold text-xs text-slate-500 hover:text-white hover:bg-white/5 transition-all"
+              >
+                Maybe Later
+              </button>
+            </div>
+
           </div>
         </div>
       )}
