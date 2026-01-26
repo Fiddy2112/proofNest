@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { CheckCircle2, FileText, Clock, Shield } from "lucide-react";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 
@@ -35,9 +35,9 @@ export default function Demo() {
               <div className="flex-1 p-8 md:p-12 border-b lg:border-b-0 lg:border-r border-white/10">
                 <div className="flex items-center gap-3 mb-8">
                   <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-white/20"></div>
-                    <div className="w-3 h-3 rounded-full bg-white/20"></div>
-                    <div className="w-3 h-3 rounded-full bg-white/20"></div>
+                    <div className="w-3 h-3 rounded-full bg-red-500/20"></div>
+                    <div className="w-3 h-3 rounded-full bg-yellow-500/20"></div>
+                    <div className="w-3 h-3 rounded-full bg-green-500/20"></div>
                   </div>
                   <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">
                     Workspace // New_Draft.txt

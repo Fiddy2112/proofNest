@@ -97,6 +97,7 @@ export default function DashboardPage() {
   const [filteredProofs, setFilteredProofs] = useState<Proof[]>([]);
   const [stats, setStats] = useState<Stats>({ totalProofs: 0, totalFolders: 0, thisMonth: 0 });
   const [currentPlan, setCurrentPlan] = useState<PlanType>("FREE");
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<string | null>(null);
 
   // User State
   const [user, setUser] = useState<User | null>(null);
@@ -331,8 +332,10 @@ export default function DashboardPage() {
         if (data.plan_id === 1) setCurrentPlan("PRO");
         else if (data.plan_id === 2) setCurrentPlan("TEAM");
         else setCurrentPlan("FREE");
+        setSubscriptionExpiresAt(data.expires_at);
       } else {
         setCurrentPlan("FREE");
+        setSubscriptionExpiresAt(null);
       }
     
     }
@@ -648,7 +651,7 @@ export default function DashboardPage() {
 
         {/* User Footer */}
         <div className="p-4 border-t border-white/5 bg-[#0a0a0a]">
-          <div className="flex items-center gap-3 mb-3">
+          {/* <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 rounded-full bg-linear-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-blue-500/20">
               {getUserInitials()}
             </div>
@@ -656,13 +659,47 @@ export default function DashboardPage() {
               <p className="text-xs font-medium text-white truncate">{getUserDisplayName()}</p>
               <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
             </div>
+          </div> */}
+          <div className="flex-1 min-w-0 mb-2">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-medium text-white truncate max-w-[80px]">
+                {getUserDisplayName()}
+              </p>
+              
+              {currentPlan === 'FREE' && (
+                <span className="px-1.5 py-0.5 rounded-[4px] bg-slate-800 border border-slate-700 text-[9px] font-bold text-slate-400 font-mono">
+                  FREE
+                </span>
+              )}
+              {currentPlan === 'PRO' && (
+                <span className="px-1.5 py-0.5 rounded-[4px] bg-orange-500/10 border border-orange-500/20 text-[9px] font-bold text-orange-400 flex items-center gap-1 justify-center font-mono">
+                  PRO
+                </span>
+              )}
+              {currentPlan === 'TEAM' && (
+                <span className="px-1.5 py-0.5 rounded-[4px] bg-purple-500/10 border border-purple-500/20 text-[9px] font-bold text-purple-400 flex items-center gap-1 justify-center font-mono">
+                  TEAM
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col">
+                <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+                
+                {currentPlan !== 'FREE' && subscriptionExpiresAt && (
+                    <p className="text-[9px] text-emerald-500/80 font-mono mt-0.5 flex items-center gap-1">
+                      <span className="w-1 h-1 rounded-full bg-emerald-500 animate-ping"></span>
+                      Exp: {new Date(subscriptionExpiresAt).toLocaleDateString()}
+                    </p>
+                )}
+            </div>
           </div>
 
           <div className="mb-3">
             {!walletAddress ? (
               <button 
                 onClick={handleConnectWallet}
-                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white/5 hover:bg-blue-500/10 border border-white/5 hover:border-blue-500/30 text-[10px] text-slate-300 hover:text-blue-400 transition-all group"
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white/5 hover:bg-blue-500/10 border border-white/5 hover:border-blue-500/30 text-[10px] text-slate-300 hover:text-blue-400 transition-all group cursor-pointer"
               >
                 <Wallet className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
                 <span>Connect Wallet</span>
@@ -689,7 +726,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-white/5 text-[10px] text-slate-500 hover:text-white hover:bg-white/5 transition-all uppercase tracking-widest">
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-white/5 text-[10px] text-slate-500 hover:text-white hover:bg-white/5 transition-all uppercase tracking-widest cursor-pointer">
             <LogOut className="w-3 h-3" /> Sign Out
           </button>
         </div>
